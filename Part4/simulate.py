@@ -181,14 +181,14 @@ TimeConstMax = 1.2
 WeightRange = 10.0
 BiasRange = 10.0
 
-USE_RANDOM = True
+USE_RANDOM = False
 
 nn = ctrnn.CTRNN(nnsize,sensor_inputs,motor_outputs)
 
 if USE_RANDOM:
     nn.randomizeParameters()
 else:
-    genotype = np.load("bestgenotype.npy")
+    genotype = np.load("bestgenotyperun5.npy")
     nn.setParameters(genotype, WeightRange, BiasRange, TimeConstMin, TimeConstMax)
 
 nn.initializeState(np.zeros(nnsize))
@@ -223,6 +223,9 @@ def set_motors(y):
 reset_robot(robotId)
 
 out_hist = []
+distance_hist = []  # Track distance from origin
+path_x = []  # Track x coordinates
+path_y = []  # Track y coordinates
 
 for t in range(150):
     nn.step(dt, [0])
@@ -238,18 +241,57 @@ for i in range(steps):
     out_hist.append(y.copy())
     set_motors(y)
     p.stepSimulation()
+    
+    # Get current position and calculate distance from origin
+    pos = p.getBasePositionAndOrientation(robotId)[0]
+    distance = np.sqrt(pos[0]**2 + pos[1]**2)  # Distance in x-y plane
+    distance_hist.append(distance)
+    
+    # Track path coordinates
+    path_x.append(pos[0])
+    path_y.append(pos[1])
+    
     # if i % 2 == 0:
     #     time.sleep(1/240)
 
 p.disconnect()
 
+# Create figure with three subplots
 out_hist = np.array(out_hist)
-plt.plot(out_hist[:, 0], label = "motor0")
+plt.figure(figsize=(15, 5))
+
+# Plot motor outputs
+plt.subplot(1, 3, 1)
+plt.plot(out_hist[:, 0], label="motor0")
 if out_hist.shape[1] > 1:
     plt.plot(out_hist[:, 1], label="motor1")
 plt.title("Neural activity (motor outputs)")
-plt.xlabel("Timestep"); plt.ylabel("output")
-plt.legend(); plt.show()
+plt.xlabel("Timestep")
+plt.ylabel("output")
+plt.legend()
+
+# Plot distance from origin
+plt.subplot(1, 3, 2)
+plt.plot(distance_hist, 'r', label='Distance from origin')
+plt.title("Distance from Origin vs Time")
+plt.xlabel("Timestep")
+plt.ylabel("Distance (m)")
+plt.legend()
+
+# Plot path trace in x-y plane
+plt.subplot(1, 3, 3)
+plt.plot(path_x, path_y, 'b-', label='Robot path')
+plt.plot(0, 0, 'r*', label='Start')  # Mark the origin
+plt.plot(path_x[-1], path_y[-1], 'g*', label='End')  # Mark the end point
+plt.title("Robot Path in X-Y Plane")
+plt.xlabel("X Position (m)")
+plt.ylabel("Y Position (m)")
+plt.axis('equal')  # Make the plot scale equally on both axes
+plt.grid(True)
+plt.legend()
+
+plt.tight_layout()
+plt.show()
 
 # dt = 1 / 240
 # freq = 2.5
